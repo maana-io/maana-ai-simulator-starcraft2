@@ -7,7 +7,7 @@ VARIABLE_NAME=${VARIABLE_NAME:-app}
 export APP_MODULE=${APP_MODULE:-"$MODULE_NAME:$VARIABLE_NAME"}
 
 HOST=${HOST:-0.0.0.0}
-PORT=${PORT:-8080}
+PORT=${PORT:-8085}
 LOG_LEVEL=${LOG_LEVEL:-info}
 
 # Start Uvicorn with live reload

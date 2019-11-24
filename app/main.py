@@ -8,10 +8,18 @@ import numpy as np
 from ariadne import ObjectType, QueryType, MutationType, gql, make_executable_schema
 from ariadne.asgi import GraphQL
 from graphqlclient import GraphQLClient
-# OpenAI Gym
-import gym
-from gym import envs
-import retro
+# StarCraft II
+import sc2
+from sc2 import run_game, maps, Race, Difficulty
+from sc2.player import Bot, Computer
+
+
+class WorkerRushBot(sc2.BotAI):
+    async def on_step(self, iteration):
+        if iteration == 0:
+            for worker in self.workers:
+                await self.do(worker.attack(self.enemy_start_locations[0]))
+
 
 # --- Constants
 
@@ -52,6 +60,8 @@ STOPPED = "Stopped"
 ENDED = "Ended"
 ERROR = "Error"
 
+GAME_LOOP = "gameLoop"
+
 # --- Simulation
 
 
@@ -72,6 +82,7 @@ def create_state():
         ENVIRONMENT: None,
         EPISODE: 0,
         STEP: 0,
+        GAME_LOOP: 0,
         OBSERVATION: (0,),
         REWARD: 0,
         STATUS: None
@@ -131,22 +142,27 @@ def agent_on_step(state, last_reward, last_action, done, context):
 
 
 def run_simulation(config):
-    set_sim_status(STARTING)
-    env = try_make_env(config[ENVIRONMENT])
-    if (env == None):
-        set_sim_status(
-            ERROR, ["Can't load environment: " + config[ENVIRONMENT]])
-        return app.state[STATUS]
-    app.state[ENVIRONMENT] = env
+    # set_sim_status(STARTING)
+    # env = try_make_env(config[ENVIRONMENT])
+    # if (env == None):
+    #     set_sim_status(
+    #         ERROR, ["Can't load environment: " + config[ENVIRONMENT]])
+    #     return app.state[STATUS]
+    # app.state[ENVIRONMENT] = env
 
-    client = GraphQLClient(config[AGENT_URI])
-    client.inject_token("Bearer " + config[TOKEN])
-    app.state[CLIENT] = client
+    # client = GraphQLClient(config[AGENT_URI])
+    # client.inject_token("Bearer " + config[TOKEN])
+    # app.state[CLIENT] = client
 
-    thread = threading.Thread(target=run_episodes, args=(99,))
-    print("thread: " + repr(thread))
-    app.state[THREAD] = thread
-    thread.start()
+    # thread = threading.Thread(target=run_episodes, args=(99,))
+    # print("thread: " + repr(thread))
+    # app.state[THREAD] = thread
+    # thread.start()
+
+    run_game(maps.get("AcropolisLE"), [
+        Bot(Race.Zerg, WorkerRushBot()),
+        Computer(Race.Protoss, Difficulty.Medium)
+    ], realtime=True)
 
     return app.state[STATUS]
 
@@ -287,6 +303,7 @@ type_defs = gql("""
 
     type SimStatus {
         id: ID!
+        gameLoop: Int!
         code: StatusCode!
         mode: Mode!
         errors: [String!]!
@@ -327,9 +344,12 @@ type_defs = gql("""
 # Resolvers are simple python functions
 @query.field("listEnvironments")
 def resolve_listEnvironments(*_):
-    envids = [spec.id for spec in envs.registry.all()]
-    res = map(lambda x: {"id": x}, sorted(envids))
-    return res
+    print("maps " + repr(maps.get()))
+    return []
+
+    # envids = [spec.id for spec in envs.registry.all()]
+    # res = map(lambda x: {"id": x}, sorted(envids))
+    # return res
 
 
 @query.field("simStatus")
