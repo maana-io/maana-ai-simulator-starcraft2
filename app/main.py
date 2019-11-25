@@ -23,44 +23,35 @@ class WorkerRushBot(sc2.BotAI):
 
 # --- Constants
 
-ID = "id"
-
-CLIENT = "client"
-CONFIG = "config"
-THREAD = "thread"
-ENVIRONMENT = "environment"
-OBSERVATION = "observation"
-EPISODE = "episode"
-STEP = "step"
 ACTION = "action"
-REWARD = "reward"
-STATUS = "status"
-CONTEXT = "context"
-REWARD = "reward"
-
-DATA = "data"
-SIM_STATUS = "simStatus"
-
-MODE = "mode"
 AGENT_URI = "agentUri"
-TOKEN = "token"
-ENVIRONMENT = "environment"
-
+CLIENT = "client"
 CODE = "code"
-ERRORS = "errors"
-MESSAGE = "message"
-
-TRAINING = "Training"
-PERFORMING = "Performing"
-
-IDLE = "Idle"
-STARTING = "Starting"
-RUNNING = "Running"
-STOPPED = "Stopped"
+CONFIG = "config"
+CONTEXT = "context"
+DATA = "data"
 ENDED = "Ended"
+EPISODE = "episode"
 ERROR = "Error"
-
+ERRORS = "errors"
 GAME_LOOP = "gameLoop"
+ID = "id"
+IDLE = "Idle"
+MAP = "map"
+MESSAGE = "message"
+MODE = "mode"
+OBSERVATION = "observation"
+PERFORMING = "Performing"
+REWARD = "reward"
+RUNNING = "Running"
+SIM_STATUS = "simStatus"
+STARTING = "Starting"
+STATUS = "status"
+STEP = "step"
+STOPPED = "Stopped"
+THREAD = "thread"
+TOKEN = "token"
+TRAINING = "Training"
 
 # --- Simulation
 
@@ -79,7 +70,7 @@ def create_state():
         CLIENT: None,
         CONFIG: None,
         THREAD: None,
-        ENVIRONMENT: None,
+        MAP: None,
         EPISODE: 0,
         STEP: 0,
         GAME_LOOP: 0,
@@ -143,12 +134,12 @@ def agent_on_step(state, last_reward, last_action, done, context):
 
 def run_simulation(config):
     # set_sim_status(STARTING)
-    # env = try_make_env(config[ENVIRONMENT])
+    # env = try_make_env(config[MAP])
     # if (env == None):
     #     set_sim_status(
-    #         ERROR, ["Can't load environment: " + config[ENVIRONMENT]])
+    #         ERROR, ["Can't load map: " + config[MAP]])
     #     return app.state[STATUS]
-    # app.state[ENVIRONMENT] = env
+    # app.state[MAP] = env
 
     # client = GraphQLClient(config[AGENT_URI])
     # client.inject_token("Bearer " + config[TOKEN])
@@ -171,7 +162,7 @@ def stop_simulation():
     set_sim_status(STOPPED)
 
     # Close the env and write monitor result info to disk
-    env = app.state[ENVIRONMENT]
+    env = app.state[MAP]
     if (env != None):
         env.close()
 
@@ -184,11 +175,11 @@ def stop_simulation():
 
 # --- OpenAI Gym
 
-def try_make_env(environmentId):
+def try_make_env(mapId):
     try:
-        return gym.make(environmentId)
+        return gym.make(mapId)
     except:
-        return retro.make(environmentId)
+        return retro.make(mapId)
     return None
 
 
@@ -200,7 +191,7 @@ def run_episodes(episode_count):
 
         set_sim_status(RUNNING)
 
-        env = app.state[ENVIRONMENT]
+        env = app.state[MAP]
 
         for i in range(episode_count):
             if (app.state[STATUS][CODE] != RUNNING):
@@ -256,7 +247,7 @@ def run_episodes(episode_count):
                 print("- step = " + str(step) + ", reward = " +
                       str(last_reward) + ", ob = " + repr(ob))
 
-                # Note there's no env.render() here. But the environment still can open window and
+                # Note there's no env.render() here. But the map still can open window and
                 # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
                 # Video is not recorded every episode, see capped_cubic_video_schedule for details.
 
@@ -310,13 +301,13 @@ type_defs = gql("""
     }
 
     input ConfigInput {
-        environment: ID!
+        map: ID!
         mode: Mode!
         agentUri: String!
         token: String!
     }
 
-    type Environment {
+    type Map {
         id: ID!
     }
 
@@ -329,7 +320,7 @@ type_defs = gql("""
     }
 
     type Query {
-        listEnvironments: [Environment!]!
+        listMaps: [Map!]!
         simStatus: SimStatus!
         observe: Observation!
         test: String!
@@ -342,14 +333,10 @@ type_defs = gql("""
 
 
 # Resolvers are simple python functions
-@query.field("listEnvironments")
-def resolve_listEnvironments(*_):
-    print("maps " + repr(maps.get()))
-    return []
 
-    # envids = [spec.id for spec in envs.registry.all()]
-    # res = map(lambda x: {"id": x}, sorted(envids))
-    # return res
+@query.field("listMaps")
+def resolve_listMaps(*_):
+    return [{"id": x.name} for x in maps.get()]
 
 
 @query.field("simStatus")
