@@ -1,4 +1,5 @@
 # --- External imports
+import asyncio
 from asgi_lifespan import Lifespan, LifespanMiddleware
 import json
 import time
@@ -59,7 +60,7 @@ TRAINING = "Training"
 def set_sim_status(code, errors=[]):
     ts = time.time()
     app.state[STATUS] = {
-        ID: "gym@" + str(ts),
+        ID: "sc2@" + str(ts),
         CODE: code,
         ERRORS: errors}
     return app.state[STATUS]
@@ -133,7 +134,8 @@ def agent_on_step(state, last_reward, last_action, done, context):
 
 
 def run_simulation(config):
-    # set_sim_status(STARTING)
+    set_sim_status(STARTING)
+
     # env = try_make_env(config[MAP])
     # if (env == None):
     #     set_sim_status(
@@ -145,15 +147,15 @@ def run_simulation(config):
     # client.inject_token("Bearer " + config[TOKEN])
     # app.state[CLIENT] = client
 
-    # thread = threading.Thread(target=run_episodes, args=(99,))
-    # print("thread: " + repr(thread))
-    # app.state[THREAD] = thread
-    # thread.start()
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=run_episodes, args=(99, loop,))
+    print("thread: " + repr(thread))
+    app.state[THREAD] = thread
+    thread.start()
 
-    run_game(maps.get("AcropolisLE"), [
-        Bot(Race.Zerg, WorkerRushBot()),
-        Computer(Race.Protoss, Difficulty.Medium)
-    ], realtime=True)
+    print("\n\n\nrun " + repr(config) + "\n\n\n\n\n")
+
+    # set_sim_status(RUNNING)
 
     return app.state[STATUS]
 
@@ -183,7 +185,7 @@ def try_make_env(mapId):
     return None
 
 
-def run_episodes(episode_count):
+def run_episodes(episode_count, loop):
     try:
         print("run_episodes:" + str(episode_count))
         app.state[EPISODE] = 0
@@ -191,81 +193,91 @@ def run_episodes(episode_count):
 
         set_sim_status(RUNNING)
 
-        env = app.state[MAP]
+        map = app.state[MAP]
 
-        for i in range(episode_count):
-            if (app.state[STATUS][CODE] != RUNNING):
-                break
+        print("run_game starting...")
 
-            app.state[EPISODE] = i
+        asyncio.set_event_loop(loop)
 
-            done = False
-            last_reward = 0
-            last_action = 0
+        run_game(maps.get(map), [
+            Bot(Race.Zerg, WorkerRushBot()),
+            Computer(Race.Protoss, Difficulty.Medium)
+        ], realtime=False)
 
-            ob = env.reset()
-            print("episode #" + str(i) + ": " + repr(ob))
+        print("run_game finished!")
 
-            agent_context = agent_on_reset()
+        # for i in range(episode_count):
+        #     if (app.state[STATUS][CODE] != RUNNING):
+        #         break
 
-            step = 0
-            while app.state[STATUS][CODE] == RUNNING:
-                app.state[STEP] = step
-                step += 1
+        #     app.state[EPISODE] = i
 
-                state = ob
-                if (isinstance(ob, np.ndarray)):
-                    state = ob.tolist()
-                elif (isinstance(ob, np.int64) or isinstance(ob, int)):
-                    state = (float(ob),)
-                else:
-                    print("type of state`: " + repr(type(state)))
+        #     done = False
+        #     last_reward = 0
+        #     last_action = 0
 
-                app.state[OBSERVATION] = state
+        #     ob = env.reset()
+        #     print("episode #" + str(i) + ": " + repr(ob))
 
-                on_step_result = agent_on_step(
-                    state, last_reward, last_action, done, agent_context)
+        #     agent_context = agent_on_reset()
 
-                # print("on_step_result " + repr(on_step_result))
+        #     step = 0
+        #     while app.state[STATUS][CODE] == RUNNING:
+        #         app.state[STEP] = step
+        #         step += 1
 
-                if (app.state[STATUS][CODE] == ERROR):
-                    break
+        #         state = ob
+        #         if (isinstance(ob, np.ndarray)):
+        #             state = ob.tolist()
+        #         elif (isinstance(ob, np.int64) or isinstance(ob, int)):
+        #             state = (float(ob),)
+        #         else:
+        #             print("type of state`: " + repr(type(state)))
 
-                # last_action = env.action_space.sample()
-                last_action = on_step_result[ACTION]
-                agent_context = on_step_result[CONTEXT]
+        #         app.state[OBSERVATION] = state
 
-                ob, last_reward, done, _ = env.step(last_action)
-                app.state[REWARD] += last_reward
+        #         on_step_result = agent_on_step(
+        #             state, last_reward, last_action, done, agent_context)
 
-                if done:
-                    agent_on_step(ob, last_reward, last_action,
-                                  done, agent_context)
-                    print("- DONE!")
-                    break
+        #         # print("on_step_result " + repr(on_step_result))
 
-                print("- step = " + str(step) + ", reward = " +
-                      str(last_reward) + ", ob = " + repr(ob))
+        #         if (app.state[STATUS][CODE] == ERROR):
+        #             break
 
-                # Note there's no env.render() here. But the map still can open window and
-                # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
-                # Video is not recorded every episode, see capped_cubic_video_schedule for details.
+        #         # last_action = env.action_space.sample()
+        #         last_action = on_step_result[ACTION]
+        #         agent_context = on_step_result[CONTEXT]
 
-                # render = env.render('rgb_array')
-                # print("- render " + repr(render))
+        #         ob, last_reward, done, _ = env.step(last_action)
+        #         app.state[REWARD] += last_reward
 
-        status = app.state[STATUS]
-        if (status[CODE] != ERROR and status[CODE] != STOPPED):
-            set_sim_status(ENDED)
+        #         if done:
+        #             agent_on_step(ob, last_reward, last_action,
+        #                           done, agent_context)
+        #             print("- DONE!")
+        #             break
+
+        #         print("- step = " + str(step) + ", reward = " +
+        #               str(last_reward) + ", ob = " + repr(ob))
+
+        #         # Note there's no env.render() here. But the map still can open window and
+        #         # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
+        #         # Video is not recorded every episode, see capped_cubic_video_schedule for details.
+
+        #         # render = env.render('rgb_array')
+        #         # print("- render " + repr(render))
+
+        # status = app.state[STATUS]
+        # if (status[CODE] != ERROR and status[CODE] != STOPPED):
+        #     set_sim_status(ENDED)
 
     except Exception as e:
         print("exception: " + repr(e))
         set_sim_status(ERROR, [str(e)])
 
-    finally:
+    # finally:
         # Close the env and write monitor result info to disk
-        env.close()
-
+        # env.close()
 
 # --- GraphQL
 
@@ -300,11 +312,16 @@ type_defs = gql("""
         errors: [String!]!
     }
 
+    input PlayerInput {
+        race: Int!
+        uri: String
+        token: String
+    }
+
     input ConfigInput {
         map: ID!
         mode: Mode!
-        agentUri: String!
-        token: String!
+        players:[PlayerInput!]!
     }
 
     type Map {
